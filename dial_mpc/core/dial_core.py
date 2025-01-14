@@ -160,13 +160,21 @@ class MBDPI:
         xss = pipeline_statess.x.pos
         rews = rewss.mean(axis=-1)
         
-        c_max_s = infoss["c_max"][:,-1] # Since it's incremental, we only take the last value as the maximum
-        jax.debug.print("infoss: {x}", x=infoss["c_max"][1:3,:])
+        # c_max_s = infoss["c_max"][:,-1] # Since it's incremental, we only take the last value as the maximum
+        c_max_s = infoss["c_max"]
         c_max = c_max_s.max() # Absolute maximum value
-
+        #jax.debug.print("c_max: {x}", x=c_max)
         pi_max = 0.1
 
-        delta = pi_max * jnp.clip(c_max_s / c_max, 0, 1)
+        # c_max_s_norm = jnp.clip(c_max_s / c_max, 0, 1)
+        # Handle the case where c_max is 0
+        c_max_s_norm = jnp.where(c_max == 0.0, c_max_s, jnp.clip(c_max_s / c_max, 0, 1))
+        #jax.debug.print("c_max_s_norm: {x}", x=c_max_s_norm)
+
+        delta = pi_max * c_max_s_norm
+        #jax.debug.print("delta: {x}", x=delta)
+
+        # delta = pi_max * jnp.clip(c_max_s / c_max, 0, 1)
 
         # TODO Implement the moving average between batches of data
 
