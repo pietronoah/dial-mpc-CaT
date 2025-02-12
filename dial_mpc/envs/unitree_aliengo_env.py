@@ -192,84 +192,14 @@ class UnitreeAliengoEnv(BaseEnv):
             ang_vel_tar,
         )
 
-        """ # reward
-        # gaits reward
-        z_feet = pipeline_state.site_xpos[self._feet_site_id][:, 2]
-        duty_ratio, cadence, amplitude = self._gait_params[self._gait]
-        phases = self._gait_phase[self._gait]
-        z_feet_tar = get_foot_step(
-            duty_ratio, cadence, amplitude, phases, state.info["step"] * self.dt
-        )
-        reward_gaits = -jnp.sum(((z_feet_tar - z_feet) / 0.05) ** 2)
-        # foot contact data based on z-position
-        foot_pos = pipeline_state.site_xpos[
-            self._feet_site_id
-        ]  # pytype: disable=attribute-error
-        foot_contact_z = foot_pos[:, 2] - self._foot_radius
-        contact = foot_contact_z < 1e-3  # a mm or less off the floor
-        contact_filt_mm = contact | state.info["last_contact"]
-        contact_filt_cm = (foot_contact_z < 3e-2) | state.info["last_contact"]
-        first_contact = (state.info["feet_air_time"] > 0) * contact_filt_mm
-        state.info["feet_air_time"] += self.dt
-        # Modified from 0.1 to 0.2
-        reward_air_time = jnp.sum((state.info["feet_air_time"] - 0.1) * first_contact)
-        # position reward
-        # TODO: Modify the position reward to map the head position
-        pos_tar = (
-            state.info["pos_tar"] + state.info["vel_tar"] * self.dt * state.info["step"]
-        )
-        pos = x.pos[self._torso_idx - 1]
-        R = math.quat_to_3x3(x.rot[self._torso_idx - 1])
-        head_vec = jnp.array([0.0, 0.0, 0.0]) # To modify if you want the head position
-        head_pos = pos + jnp.dot(R, head_vec)
-        reward_pos = -jnp.sum((head_pos - pos_tar) ** 2)
-        # stay upright reward
-        vec_tar = jnp.array([0.0, 0.0, 1.0])
-        vec = math.rotate(vec_tar, x.rot[0])
-        reward_upright = -jnp.sum(jnp.square(vec - vec_tar))
-        # yaw orientation reward
-        yaw_tar = (
-            state.info["yaw_tar"]
-            + state.info["ang_vel_tar"][2] * self.dt * state.info["step"]
-        )
-        yaw = math.quat_to_euler(x.rot[self._torso_idx - 1])[2]
-        d_yaw = yaw - yaw_tar
-        reward_yaw = -jnp.square(jnp.atan2(jnp.sin(d_yaw), jnp.cos(d_yaw)))
-        # stay to norminal pose reward
-        # reward_pose = -jnp.sum(jnp.square(joint_targets - self._default_pose))
-        # velocity reward
-        vb = global_to_body_velocity(
-            xd.vel[self._torso_idx - 1], x.rot[self._torso_idx - 1]
-        )
-        ab = global_to_body_velocity(
-            xd.ang[self._torso_idx - 1] * jnp.pi / 180.0, x.rot[self._torso_idx - 1]
-        )
-        reward_vel = -jnp.sum((vb[:2] - state.info["vel_tar"][:2]) ** 2)
-        reward_ang_vel = -jnp.sum((ab[2] - state.info["ang_vel_tar"][2]) ** 2)
-        # height reward
-        reward_height = -jnp.sum(
-            (x.pos[self._torso_idx - 1, 2] - state.info["pos_tar"][2]) ** 2
-        )
-        # energy reward
-        reward_energy = -jnp.sum(
-            jnp.maximum(ctrl * pipeline_state.qvel[6:] / 160.0, 0.0) ** 2
-        )
-        # stay alive reward
-        reward_alive = 1.0 - state.done
-        # reward
-        reward = (
-            reward_gaits * 0.5 # from 0.1 to 0.5
-            + reward_air_time * 0.0
-            + reward_pos * 0.0
-            + reward_upright * 0.5
-            + reward_yaw * 0.3
-            # + reward_pose * 0.0
-            + reward_vel * 1.0
-            + reward_ang_vel * 1.0
-            + reward_height * 1.0
-            + reward_energy * 0.1 #0.00
-            + reward_alive * 0.0
-        ) """
+        
+        """ ██████╗ ███████╗██╗    ██╗ █████╗ ██████╗ ██████╗ ███████╗
+            ██╔══██╗██╔════╝██║    ██║██╔══██╗██╔══██╗██╔══██╗██╔════╝
+            ██████╔╝█████╗  ██║ █╗ ██║███████║██████╔╝██║  ██║███████╗
+            ██╔══██╗██╔══╝  ██║███╗██║██╔══██║██╔══██╗██║  ██║╚════██║
+            ██║  ██║███████╗╚███╔███╔╝██║  ██║██║  ██║██████╔╝███████║
+            ╚═╝  ╚═╝╚══════╝ ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚══════╝
+                                                                    """
 
 
         # Funzione di shaping esponenziale per i rewards (penalizza i valori più alti)
@@ -279,12 +209,13 @@ class UnitreeAliengoEnv(BaseEnv):
 
         # gaits reward
         z_feet = pipeline_state.site_xpos[self._feet_site_id][:, 2]
+        # jax.debug.print("{y}", y=pipeline_state.q)
         duty_ratio, cadence, amplitude = self._gait_params[self._gait]
         phases = self._gait_phase[self._gait]
         z_feet_tar = get_foot_step(
             duty_ratio, cadence, amplitude, phases, state.info["step"] * self.dt
         )
-        reward_gaits = exp_shaping(jnp.sum(((z_feet_tar - z_feet) / 0.05) ** 2), scale=1.0)
+        reward_gaits = exp_shaping(jnp.sum(((z_feet_tar - z_feet) / 0.05) ** 2), scale=2.0)
 
         # foot contact data based on z-position
         foot_pos = pipeline_state.site_xpos[
@@ -311,7 +242,7 @@ class UnitreeAliengoEnv(BaseEnv):
         # stay upright reward
         vec_tar = jnp.array([0.0, 0.0, 1.0])
         vec = math.rotate(vec_tar, x.rot[0])
-        reward_upright = exp_shaping(jnp.sum(jnp.square(vec - vec_tar)), scale=1.0)
+        reward_upright = exp_shaping(jnp.sum(jnp.square(vec - vec_tar)), scale=4.0)
 
         # yaw orientation reward
         yaw_tar = (
@@ -320,7 +251,7 @@ class UnitreeAliengoEnv(BaseEnv):
         )
         yaw = math.quat_to_euler(x.rot[self._torso_idx - 1])[2]
         d_yaw = yaw - yaw_tar
-        reward_yaw = exp_shaping(jnp.square(jnp.atan2(jnp.sin(d_yaw), jnp.cos(d_yaw))), scale=1.0)
+        reward_yaw = exp_shaping(jnp.square(jnp.atan2(jnp.sin(d_yaw), jnp.cos(d_yaw))), scale=4.0)
 
         # velocity reward
         vb = global_to_body_velocity(
@@ -329,8 +260,8 @@ class UnitreeAliengoEnv(BaseEnv):
         ab = global_to_body_velocity(
             xd.ang[self._torso_idx - 1] * jnp.pi / 180.0, x.rot[self._torso_idx - 1]
         )
-        reward_vel = exp_shaping(jnp.sum((vb[:2] - state.info["vel_tar"][:2]) ** 2), scale=1.0)
-        reward_ang_vel = exp_shaping(jnp.sum((ab[2] - state.info["ang_vel_tar"][2]) ** 2), scale=1.0)
+        reward_vel = exp_shaping(jnp.sum((vb[:2] - state.info["vel_tar"][:2]) ** 2), scale=4.0)
+        reward_ang_vel = exp_shaping(jnp.sum((ab[2] - state.info["ang_vel_tar"][2]) ** 2), scale=4.0)
 
         # height reward
         reward_height = exp_shaping(jnp.sum(
@@ -348,33 +279,39 @@ class UnitreeAliengoEnv(BaseEnv):
         # final reward
         reward = (
             reward_gaits * 1.0
-            + reward_air_time * 0.0
-            + reward_pos * 0.0
             + reward_upright * 1.0
-            + reward_yaw * 0.5
+            + reward_yaw * 1.0
             + reward_vel * 1.0
             + reward_ang_vel * 1.0
             + reward_height * 1.0
-            + reward_energy * 0.0
-            + reward_alive * 0.0
         )
+
+
+        """  ██████╗ ██████╗ ███╗   ██╗███████╗████████╗██████╗  █████╗ ██╗███╗   ██╗████████╗███████╗
+            ██╔════╝██╔═══██╗████╗  ██║██╔════╝╚══██╔══╝██╔══██╗██╔══██╗██║████╗  ██║╚══██╔══╝██╔════╝
+            ██║     ██║   ██║██╔██╗ ██║███████╗   ██║   ██████╔╝███████║██║██╔██╗ ██║   ██║   ███████╗
+            ██║     ██║   ██║██║╚██╗██║╚════██║   ██║   ██╔══██╗██╔══██║██║██║╚██╗██║   ██║   ╚════██║
+            ╚██████╗╚██████╔╝██║ ╚████║███████║   ██║   ██║  ██║██║  ██║██║██║ ╚████║   ██║   ███████║
+            ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝   ╚═╝   ╚══════╝
+                                                                                                    """
+
+        #jax.debug.print("reward: {x}", x=reward)
 
         # Initialize limits
         torque_limit = 35.0
-        velocity_limit = 80.0
 
-        # Torque violation
-        torque_violation = jnp.abs(ctrl) - torque_limit
+        # Torque violation - with normalization
+        cstr_torque = jnp.maximum(0.0, (jnp.abs(ctrl) - torque_limit) / torque_limit)
 
         # Velocity violation
-        velocity_violation = jnp.abs(pipeline_state.qvel[6:]) - velocity_limit
+        # velocity_violation = jnp.abs(pipeline_state.qvel[6:]) - velocity_limit
 
-        # Maximum constraint violation, ensuring comparison with 0.0
+        """ # Maximum constraint violation, ensuring comparison with 0.0
         c_max = jnp.maximum(0.0, jnp.maximum(jnp.max(torque_violation), jnp.max(velocity_violation)))
-        c_max = jnp.maximum(state.info["c_max"], c_max)
+        c_max = jnp.maximum(state.info["c_max"], c_max) """
 
         # done
-        up = jnp.array([0.0, 0.0, 1.0])
+        up = jnp.array([0.0, 0.0, 1.0]) 
         joint_angles = pipeline_state.q[7:]
         done = jnp.dot(math.rotate(up, x.rot[self._torso_idx - 1]), up) < 0
         done |= jnp.any(joint_angles < self.joint_range[:, 0])
@@ -389,7 +326,7 @@ class UnitreeAliengoEnv(BaseEnv):
         state.info["z_feet_tar"] = z_feet_tar
         state.info["feet_air_time"] *= ~contact_filt_mm
         state.info["last_contact"] = contact
-        state.info["c_max"] = c_max
+        # state.info["c_max"] = c_max
 
         state = state.replace(
             pipeline_state=pipeline_state, obs=obs, reward=reward, done=done

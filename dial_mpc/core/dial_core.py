@@ -151,6 +151,7 @@ class MBDPI:
 
         # esitimate mu_0tm1
         rewss, pipeline_statess, infoss = self.rollout_us_vmap(state, us)
+
         #jax.debug.print("infoss: {x}", x=infoss["c_max"][0,:])
         """ jax.debug.print("infoss: {x}", x=infoss["c_max"].shape)
         jax.debug.print("rewss: {x}", x=rewss.shape) """
@@ -172,6 +173,9 @@ class MBDPI:
         #jax.debug.print("c_max_s_norm: {x}", x=c_max_s_norm)
 
         delta = pi_max * c_max_s_norm
+
+        """ rewss_delta = rewss * delta
+        rews = rewss_delta.mean(axis=-1) """
         #jax.debug.print("delta: {x}", x=delta)
 
         # delta = pi_max * jnp.clip(c_max_s / c_max, 0, 1)
@@ -181,6 +185,7 @@ class MBDPI:
         # jax.debug.print("rews: {x}", x=rews.shape)
         # temp_sample is the lambda value
         logp0 = (rews - rew_Ybar_i) / rews.std(axis=-1) / self.args.temp_sample
+        # logp0 = rews
 
         weights = jax.nn.softmax(logp0)
         Ybar, new_noise_scale = self.update_fn(weights, Y0s, noise_scale, Ybar_i)
