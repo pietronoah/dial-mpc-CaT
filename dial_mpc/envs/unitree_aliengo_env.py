@@ -30,7 +30,7 @@ from dial_mpc.utils.io_utils import get_model_path
     ██╔══██║██║     ██║██╔══╝  ██║╚██╗██║██║   ██║██║   ██║
     ██║  ██║███████╗██║███████╗██║ ╚████║╚██████╔╝╚██████╔╝ 
     ╚═╝  ╚═╝╚══════╝╚═╝╚══════╝╚═╝  ╚═══╝ ╚═════╝  ╚═════╝  """
-                                                                                                                                                                       
+                                                                                                                                              
 
 
 @dataclass
@@ -133,7 +133,7 @@ class UnitreeAliengoEnv(BaseEnv):
 
         state_info = {
             "rng": rng,
-            "pos_tar": jnp.array([0.0, 0.0, 0.38]), # Central point of the torso, originally the head of the robot
+            "pos_tar": jnp.array([0.0, 0.0, 0.4]), # Central point of the torso, originally the head of the robot
             "vel_tar": jnp.array([0.0, 0.0, 0.0]),
             "ang_vel_tar": jnp.array([0.0, 0.0, 0.0]),
             "yaw_tar": 0.0,
@@ -142,8 +142,7 @@ class UnitreeAliengoEnv(BaseEnv):
             "z_feet_tar": jnp.zeros(4),
             "randomize_target": self._config.randomize_tasks,
             "last_contact": jnp.zeros(4, dtype=jnp.bool),
-            "feet_air_time": jnp.zeros(4),
-            "c_max": 0.0,
+            "feet_air_time": jnp.zeros(4)
         }
 
         obs = self._get_obs(pipeline_state, state_info)
@@ -278,7 +277,7 @@ class UnitreeAliengoEnv(BaseEnv):
 
         # final reward
         reward = (
-            reward_gaits * 1.0
+            reward_gaits * 0.0 # 1.5
             + reward_upright * 1.0
             + reward_yaw * 1.0
             + reward_vel * 1.0
@@ -298,10 +297,13 @@ class UnitreeAliengoEnv(BaseEnv):
         #jax.debug.print("reward: {x}", x=reward)
 
         # Initialize limits
-        torque_limit = 35.0
+        torque_limit = jnp.array([35.0, 35.0, 45.0, 35.0, 35.0, 45.0, 35.0, 35.0, 45.0, 35.0, 35.0, 45.0])
 
         # Torque violation - with normalization
-        cstr_torque = jnp.maximum(0.0, (jnp.abs(ctrl) - torque_limit) / torque_limit)
+        cstr_torque = jnp.maximum(0.0, (jnp.abs(ctrl)-torque_limit) / torque_limit)
+        cstr_HAA = jnp.maximum(0.0, (jnp.abs(pipeline_state.q[jnp.array([7, 10, 13, 16])])-0.1) / 0.1)
+        #cstr_air_time = jnp.maximum(0.0, (0.2 - state.info["feet_air_time"])/0.2 * first_contact)
+        cstr_feet_z = jnp.maximum(0.0, (jnp.abs(z_feet_tar - z_feet) - 0.01)/0.01)
 
         # Velocity violation
         # velocity_violation = jnp.abs(pipeline_state.qvel[6:]) - velocity_limit
@@ -309,6 +311,10 @@ class UnitreeAliengoEnv(BaseEnv):
         """ # Maximum constraint violation, ensuring comparison with 0.0
         c_max = jnp.maximum(0.0, jnp.maximum(jnp.max(torque_violation), jnp.max(velocity_violation)))
         c_max = jnp.maximum(state.info["c_max"], c_max) """
+
+        constr = jnp.concatenate([cstr_torque, cstr_HAA, cstr_feet_z])
+
+        # jax.debug.print("HAA: {x}", x=jnp.abs(pipeline_state.q[jnp.array([7, 10, 13, 16])]))
 
         # done
         up = jnp.array([0.0, 0.0, 1.0]) 
@@ -331,7 +337,7 @@ class UnitreeAliengoEnv(BaseEnv):
         state = state.replace(
             pipeline_state=pipeline_state, obs=obs, reward=reward, done=done
         )
-        return state
+        return state, constr
 
     def _get_obs(
         self,

@@ -49,11 +49,11 @@ def rollout_us(step_env, state, us):
             - pipeline_states (iterable): A sequence of pipeline states obtained at each step.
     """
     def step(state, u):
-        state = step_env(state, u)
-        return state, (state.reward, state.pipeline_state, state.info)
+        state, c_viol = step_env(state, u)
+        return state, (state.reward, state.pipeline_state, state.info, c_viol)
 
-    _, (rews, pipline_states, info) = jax.lax.scan(step, state, us)
-    return rews, pipline_states, info
+    _, (rews, pipline_states, info, c_viol_s) = jax.lax.scan(step, state, us)
+    return rews, pipline_states, info, c_viol_s
 
 
 @jax.jit
@@ -127,65 +127,55 @@ class MBDPI:
 
     # Function performing the reverse diffusion
     @functools.partial(jax.jit, static_argnums=(0,))
-    def reverse_once(self, state, rng, Ybar_i, noise_scale):
+    def reverse_once(self, state, rng, Ybar_i, noise_scale, c_max):
+
         # sample from q_i
-        # rng maight be the range of the random number generator?
         rng, Y0s_rng = jax.random.split(rng)
-        # jax.debug.print("Y0s_rng: {x}", x=Y0s_rng)
+        
         eps_Y = jax.random.normal(
             Y0s_rng, (self.args.Nsample, self.args.Hnode + 1, self.nu)
         )
-        # jax.debug.print("Y0s_rng: {x}", x=Y0s_rng)
+        
         # Noise scale is a 5-element vector used to scale the noise (divided by 2 at each iteration)
         Y0s = eps_Y * noise_scale[None, :, None] + Ybar_i
-        # jax.debug.print("Ybar_i: {x}", x=Ybar_i)
+        
         # we can't change the first control
         Y0s = Y0s.at[:, 0].set(Ybar_i[0, :])
         # append Y0s with Ybar_i to also evaluate Ybar_i
         Y0s = jnp.concatenate([Y0s, Ybar_i[None]], axis=0)
         Y0s = jnp.clip(Y0s, -1.0, 1.0)
-        # jax.debug.print("Y0s: {x}", x=Y0s)
+        
         # convert Y0s to us
         us = self.node2u_vvmap(Y0s)
-        # jax.debug.print("us: {x}", x=us)
 
         # esitimate mu_0tm1
-        rewss, pipeline_statess, infoss = self.rollout_us_vmap(state, us)
+        rewss, pipeline_statess, infoss, constr_value = self.rollout_us_vmap(state, us) # rewss.shape = [2049,17]
 
-        #jax.debug.print("infoss: {x}", x=infoss["c_max"][0,:])
-        """ jax.debug.print("infoss: {x}", x=infoss["c_max"].shape)
-        jax.debug.print("rewss: {x}", x=rewss.shape) """
-        rew_Ybar_i = rewss[-1].mean()
+        # Calculate the updated max constraint violation - exponential moving average
+        alpha = 0.98
+        c_max_updated = alpha*c_max + (1-alpha)*jnp.max(constr_value, axis=(0, 1))
+
+        mask = c_max_updated != 0  # Boolean mask
+        ratio_violation = jnp.where(mask.reshape(1, 1, -1), constr_value / c_max_updated.reshape(1, 1, -1), 0)
+        # ratio_violation = constr_value / c_max_updated.reshape(1, 1, -1)
+        ratio_violation_max = jnp.max(ratio_violation, axis=2)
+
+        pi_max = 0.01
+        delta = pi_max * jnp.clip(ratio_violation_max, 0, 1)
+        gamma = 1 - delta
+
+        gamma_cumprod = jnp.cumprod(gamma, axis=1)  # Cumulative product along the time axis
+      
+        rewss = rewss * gamma_cumprod  # Element-wise multiplication
+
+        rew_Ybar_i = rewss[-1].mean() # average reward of the last sequence (last trajectory) - don't know why
         qss = pipeline_statess.q
         qdss = pipeline_statess.qd
         xss = pipeline_statess.x.pos
         rews = rewss.mean(axis=-1)
         
-        # c_max_s = infoss["c_max"][:,-1] # Since it's incremental, we only take the last value as the maximum
-        c_max_s = infoss["c_max"]
-        c_max = c_max_s.max() # Absolute maximum value
-        #jax.debug.print("c_max: {x}", x=c_max)
-        pi_max = 0.1
-
-        # c_max_s_norm = jnp.clip(c_max_s / c_max, 0, 1)
-        # Handle the case where c_max is 0
-        c_max_s_norm = jnp.where(c_max == 0.0, c_max_s, jnp.clip(c_max_s / c_max, 0, 1))
-        #jax.debug.print("c_max_s_norm: {x}", x=c_max_s_norm)
-
-        delta = pi_max * c_max_s_norm
-
-        """ rewss_delta = rewss * delta
-        rews = rewss_delta.mean(axis=-1) """
-        #jax.debug.print("delta: {x}", x=delta)
-
-        # delta = pi_max * jnp.clip(c_max_s / c_max, 0, 1)
-
-        # TODO Implement the moving average between batches of data
-
-        # jax.debug.print("rews: {x}", x=rews.shape)
         # temp_sample is the lambda value
         logp0 = (rews - rew_Ybar_i) / rews.std(axis=-1) / self.args.temp_sample
-        # logp0 = rews
 
         weights = jax.nn.softmax(logp0)
         Ybar, new_noise_scale = self.update_fn(weights, Y0s, noise_scale, Ybar_i)
@@ -204,7 +194,7 @@ class MBDPI:
             "new_noise_scale": new_noise_scale,
         }
 
-        return rng, Ybar, info
+        return rng, Ybar, info, c_max_updated
 
     # Following function is not used in this current implementation
     """ def reverse(self, state, YN, rng):
@@ -238,9 +228,9 @@ class MBDPI:
 def main():
 
     def reverse_scan(rng_Y0_state, factor):
-        rng, Y0, state = rng_Y0_state
-        rng, Y0, info = mbdpi.reverse_once(state, rng, Y0, factor)
-        return (rng, Y0, state), info
+        rng, Y0, state, c_max = rng_Y0_state
+        rng, Y0, info, c_max_updated = mbdpi.reverse_once(state, rng, Y0, factor, c_max)
+        return (rng, Y0, state, c_max_updated), info
 
     art.tprint("IDRA @ UniTN\nDIAL-MPC", font="big", chr_ignore=True)
     parser = argparse.ArgumentParser()
@@ -304,10 +294,14 @@ def main():
     state = state_init
     us = []
     infos = []
+
+    # Maximum constraint violation - dimension equal to the number of constraints
+    c_max = jnp.zeros([20])
+
     with tqdm(range(Nstep), desc="Rollout") as pbar:
         for t in pbar:
             # forward single step
-            state = step_env(state, Y0[0]) # Physical step in the simulator
+            state, _ = step_env(state, Y0[0]) # Physical step in the simulator
             rollout.append(state.pipeline_state)
             rews.append(state.reward)
             us.append(Y0[0])
@@ -325,8 +319,8 @@ def main():
             traj_diffuse_factors = (
                 mbdpi.sigma_control * dial_config.traj_diffuse_factor ** (jnp.arange(n_diffuse))[:, None]
             )
-            (rng, Y0, _), info = jax.lax.scan(
-                reverse_scan, (rng, Y0, state), traj_diffuse_factors
+            (rng, Y0, _, c_max), info = jax.lax.scan(
+                reverse_scan, (rng, Y0, state, c_max), traj_diffuse_factors
             )
             rews_plan.append(info["rews"][-1].mean())
             infos.append(info)

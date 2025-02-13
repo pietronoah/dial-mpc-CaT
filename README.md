@@ -19,14 +19,6 @@ DIAL-MPC is a sampling-based MPC framework for legged robot ***full-order torque
 DIAL-MPC is designed to be simple and flexible, with minimal requirements for specific reward design and dynamics model. It directly samples and rolls out in physics-based simulations (``Brax``) and does not require reduced-order modeling, linearization, convexification, or predefined contact sequences.
 That means you can test out the controller in a plug-and-play manner with minimum setup.
 
-## News
-
-- 11/03/2024: 🎉 Sim2Real pipeline is ready! Check out the [Sim2Real](#deploy-in-real-unitree-go2) section for more details.
-- 09/25/2024: 🎉 DIAL-MPC is released with open-source codes! Sim2Real pipeline coming soon!
-
-https://github.com/user-attachments/assets/f2e5f26d-69ac-4478-872e-26943821a218
-
-
 ## Table of Contents
 
 1. [Install](#install-dial-mpc)
@@ -310,28 +302,3 @@ dial-mpc-plan --config my_env.yaml --custom-env my_env
 ## Rendering Rollouts in Blender
 
 If you want better visualization, you can check out the `render` branch for the Blender visualization examples. 
-
-## Acknowledgements
-
-* This codebase's environment and RL implementation is built on top of [Brax](https://github.com/google/brax).
-* We use [Mujoco MJX](https://github.com/deepmind/mujoco) for the physics engine.
-* Controller design and implementation is inspired by [Model-based Diffusion](https://github.com/LeCAR-Lab/model-based-diffusion).
-
-
-## BibTeX
-
-If you find this code useful for your research, please consider citing:
-
-```bibtex
-@misc{xue2024fullordersamplingbasedmpctorquelevel,
-      title={Full-Order Sampling-Based MPC for Torque-Level Locomotion Control via Diffusion-Style Annealing}, 
-      author={Haoru Xue and Chaoyi Pan and Zeji Yi and Guannan Qu and Guanya Shi},
-      year={2024},
-      eprint={2409.15610},
-      archivePrefix={arXiv},
-      primaryClass={cs.RO},
-      url={https://arxiv.org/abs/2409.15610}, 
-}
-```
-# dial-mpc_aliengo
-# dial-mpc_aliengo
