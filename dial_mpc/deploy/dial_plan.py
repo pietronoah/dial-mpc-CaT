@@ -80,6 +80,8 @@ class MBDPublisher:
         self.Y = jnp.zeros([self.dial_config.Hnode + 1, self.mbdpi.nu])
         self.ctrl_dt = env_config.dt
 
+        self.c_max = jnp.zeros([38])
+
         # parameters
         self.timer_period = env_config.dt  # seconds
         self.n_acts = self.dial_config.Hsample + 1  # action buffer size
@@ -157,9 +159,9 @@ class MBDPublisher:
     def main_loop(self):
 
         def reverse_scan(rng_Y0_state, factor):
-            rng, Y0, state = rng_Y0_state
-            rng, Y0, info = self.mbdpi.reverse_once(state, rng, Y0, factor)
-            return (rng, Y0, state), info
+            rng, Y0, state, c_max = rng_Y0_state
+            rng, Y0, info, c_max_updated = self.mbdpi.reverse_once(state, rng, Y0, factor, c_max)
+            return (rng, Y0, state, c_max_updated), info
 
         last_plan_time = self.time_shared[0]
         state = self.init_mjx_state(
@@ -169,6 +171,7 @@ class MBDPublisher:
         )
 
         first_time = True
+        
         while True:
             t0 = time.time()
             # get state
@@ -200,15 +203,21 @@ class MBDPublisher:
                     self.dial_config.traj_diffuse_factor
                     ** (jnp.arange(n_diffuse))[:, None]
                 )
-                (self.rng, self.Y, _), info = jax.lax.scan(
+                """ (self.rng, self.Y, _), info = jax.lax.scan(
                     reverse_scan, (self.rng, self.Y, state), traj_diffuse_factors
+                ) """
+                (self.rng, self.Y, _, self.c_max), info = jax.lax.scan(
+                    reverse_scan, (self.rng, self.Y, state, self.c_max), traj_diffuse_factors
                 )
                 n_diffuse = self.dial_config.Ndiffuse
             traj_diffuse_factors = (
                 self.dial_config.traj_diffuse_factor ** (jnp.arange(n_diffuse))[:, None]
             )
-            (self.rng, self.Y, _), info = jax.lax.scan(
+            """ (self.rng, self.Y, _), info = jax.lax.scan(
                 reverse_scan, (self.rng, self.Y, state), traj_diffuse_factors
+            ) """
+            (self.rng, self.Y, _, self.c_max), info = jax.lax.scan(
+                reverse_scan, (self.rng, self.Y, state, self.c_max), traj_diffuse_factors
             )
             # use position control
             actual_joint_targets = info["qbar"][:, 7:]

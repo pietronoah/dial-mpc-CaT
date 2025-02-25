@@ -31,6 +31,7 @@ plt.style.use("science")
 xla_flags = os.environ.get("XLA_FLAGS", "")
 xla_flags += " --xla_gpu_triton_gemm_any=True"
 os.environ["XLA_FLAGS"] = xla_flags
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 
 def rollout_us(step_env, state, us):
@@ -50,10 +51,10 @@ def rollout_us(step_env, state, us):
     """
     def step(state, u):
         state, c_viol = step_env(state, u)
-        return state, (state.reward, state.pipeline_state, state.info, c_viol)
+        return state, (state.reward, state.pipeline_state, state.info, state.done, c_viol)
 
-    _, (rews, pipline_states, info, c_viol_s) = jax.lax.scan(step, state, us)
-    return rews, pipline_states, info, c_viol_s
+    _, (rews, pipline_states, info, done, c_viol_s) = jax.lax.scan(step, state, us)
+    return rews, pipline_states, info, done, c_viol_s
 
 
 @jax.jit
@@ -149,10 +150,19 @@ class MBDPI:
         us = self.node2u_vvmap(Y0s)
 
         # esitimate mu_0tm1
-        rewss, pipeline_statess, infoss, constr_value = self.rollout_us_vmap(state, us) # rewss.shape = [2049,17]
+        rewss, pipeline_statess, infoss, doness, constr_value = self.rollout_us_vmap(state, us) # rewss.shape = [2049,17]
+
+        # jax.debug.print("{x}", x=doness.shape)
+
+        # Compute the minimum value in the matrix
+        min_rewss = jnp.min(rewss)
+        # Compute the offset (shift by the most negative value)
+        offset = jnp.abs(min_rewss) + 1e-3  # Small epsilon to avoid zero
+        # Apply the offset to all elements in the matrix
+        rewss = rewss + offset
 
         # Calculate the updated max constraint violation - exponential moving average
-        alpha = 0.98
+        alpha = 0.5
         c_max_updated = alpha*c_max + (1-alpha)*jnp.max(constr_value, axis=(0, 1))
 
         mask = c_max_updated != 0  # Boolean mask
@@ -160,22 +170,40 @@ class MBDPI:
         # ratio_violation = constr_value / c_max_updated.reshape(1, 1, -1)
         ratio_violation_max = jnp.max(ratio_violation, axis=2)
 
-        pi_max = 0.01
+        exp_decay = True
+        if exp_decay:
+            n_envs, horizon = ratio_violation_max.shape  # Extract dimensions
+            time_indices = jnp.arange(horizon)
+            pi_max = 0.02 * jnp.exp(-0.2 * time_indices)  # Shape: (horizon,)
+            pi_max = jnp.expand_dims(pi_max, axis=0)  # Shape: (1, horizon)
+            pi_max = jnp.tile(pi_max, (n_envs, 1))  # Shape: (n_envs, horizon)
+        else:
+            pi_max = 0.01
+
         delta = pi_max * jnp.clip(ratio_violation_max, 0, 1)
+        delta.at[:,0].set(0.0)
+        # Ensure delta is 1 where doness is 1
+        # delta = jnp.where(doness == 1, 1, delta)
+
         gamma = 1 - delta
+
+        # jax.debug.print("{x}", x=constr_value[:,0])
 
         gamma_cumprod = jnp.cumprod(gamma, axis=1)  # Cumulative product along the time axis
       
         rewss = rewss * gamma_cumprod  # Element-wise multiplication
 
-        rew_Ybar_i = rewss[-1].mean() # average reward of the last sequence (last trajectory) - don't know why
+        # rew_Ybar_i = rewss[-1].mean() # average reward of the last sequence (last trajectory) - don't know why
         qss = pipeline_statess.q
         qdss = pipeline_statess.qd
         xss = pipeline_statess.x.pos
         rews = rewss.mean(axis=-1)
+        rew_Ybar_i = rews.mean()
+
+        #jax.debug.print("{x}", x=rew_Ybar_i)
         
         # temp_sample is the lambda value
-        logp0 = (rews - rew_Ybar_i) / rews.std(axis=-1) / self.args.temp_sample
+        logp0 = (rews - rew_Ybar_i) / rews.std(axis=-1) / self.args.temp_sample # * 10
 
         weights = jax.nn.softmax(logp0)
         Ybar, new_noise_scale = self.update_fn(weights, Y0s, noise_scale, Ybar_i)
@@ -232,7 +260,7 @@ def main():
         rng, Y0, info, c_max_updated = mbdpi.reverse_once(state, rng, Y0, factor, c_max)
         return (rng, Y0, state, c_max_updated), info
 
-    art.tprint("IDRA @ UniTN\nDIAL-MPC", font="big", chr_ignore=True)
+    art.tprint("Idra @ UniTn\nDial-MPC", font="big", chr_ignore=True)
     parser = argparse.ArgumentParser()
     config_or_example = parser.add_mutually_exclusive_group(required=True)
     config_or_example.add_argument("--config", type=str, default=None)
@@ -296,7 +324,7 @@ def main():
     infos = []
 
     # Maximum constraint violation - dimension equal to the number of constraints
-    c_max = jnp.zeros([20])
+    c_max = jnp.zeros([36])
 
     with tqdm(range(Nstep), desc="Rollout") as pbar:
         for t in pbar:
@@ -305,6 +333,8 @@ def main():
             rollout.append(state.pipeline_state)
             rews.append(state.reward)
             us.append(Y0[0])
+
+            # jax.debug.print("{x}", x=us)
 
             # update Y0
             Y0 = mbdpi.shift(Y0)

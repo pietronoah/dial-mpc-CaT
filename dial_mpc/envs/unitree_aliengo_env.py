@@ -63,7 +63,7 @@ class UnitreeAliengoEnv(BaseEnv):
             #                  ratio, cadence, amplitude
             "stand": jnp.array([1.0, 1.0, 0.0]),
             "walk": jnp.array([0.75, 1.0, 0.08]),
-            "trot": jnp.array([0.45, 2, 0.08]),
+            "trot": jnp.array([0.45, 2.5, 0.08]),
             "canter": jnp.array([0.4, 4, 0.06]),
             "gallop": jnp.array([0.3, 3.5, 0.10]),
         }
@@ -138,8 +138,6 @@ class UnitreeAliengoEnv(BaseEnv):
             "ang_vel_tar": jnp.array([0.0, 0.0, 0.0]),
             "yaw_tar": 0.0,
             "step": 0,
-            "z_feet": jnp.zeros(4),
-            "z_feet_tar": jnp.zeros(4),
             "randomize_target": self._config.randomize_tasks,
             "last_contact": jnp.zeros(4, dtype=jnp.bool),
             "feet_air_time": jnp.zeros(4)
@@ -179,10 +177,11 @@ class UnitreeAliengoEnv(BaseEnv):
             return self.sample_command(cmd_rng)
 
         vel_tar, ang_vel_tar = jax.lax.cond(
-            (state.info["randomize_target"]) & (state.info["step"] % 500 == 0),
+            (state.info["randomize_target"]) & (state.info["step"] % 50 == 0),
             randomize,
             dont_randomize,
         )
+        # jax.debug.print("Target vel: {x}, ang vel: {y}", x=vel_tar, y=ang_vel_tar)
         state.info["vel_tar"] = jnp.minimum(
             vel_tar * state.info["step"] * self.dt / self._config.ramp_up_time, vel_tar
         )
@@ -200,89 +199,41 @@ class UnitreeAliengoEnv(BaseEnv):
             ╚═╝  ╚═╝╚══════╝ ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚══════╝
                                                                     """
 
-
-        # Funzione di shaping esponenziale per i rewards (penalizza i valori più alti)
-        def exp_shaping(x, scale=1.0, min_val=0.0):
-            """Funzione esponenziale che penalizza i valori più alti."""
-            return jnp.exp(-scale * x) + min_val  # Penalizza valori più alti
-
-        # gaits reward
-        z_feet = pipeline_state.site_xpos[self._feet_site_id][:, 2]
-        # jax.debug.print("{y}", y=pipeline_state.q)
-        duty_ratio, cadence, amplitude = self._gait_params[self._gait]
-        phases = self._gait_phase[self._gait]
-        z_feet_tar = get_foot_step(
-            duty_ratio, cadence, amplitude, phases, state.info["step"] * self.dt
-        )
-        reward_gaits = exp_shaping(jnp.sum(((z_feet_tar - z_feet) / 0.05) ** 2), scale=2.0)
-
-        # foot contact data based on z-position
-        foot_pos = pipeline_state.site_xpos[
-            self._feet_site_id
-        ]
+        # Foot contact data based on z-position
+        foot_pos = pipeline_state.site_xpos[self._feet_site_id]  
         foot_contact_z = foot_pos[:, 2] - self._foot_radius
-        contact = foot_contact_z < 1e-3  # a mm or less off the floor
+
+        contact = foot_contact_z < 1e-3  # A mm or less off the floor
         contact_filt_mm = contact | state.info["last_contact"]
         contact_filt_cm = (foot_contact_z < 3e-2) | state.info["last_contact"]
         first_contact = (state.info["feet_air_time"] > 0) * contact_filt_mm
         state.info["feet_air_time"] += self.dt
-        reward_air_time = exp_shaping(jnp.sum((state.info["feet_air_time"] - 0.1) * first_contact), scale=1.0)
 
-        # position reward
-        pos_tar = (
-            state.info["pos_tar"] + state.info["vel_tar"] * self.dt * state.info["step"]
-        )
-        pos = x.pos[self._torso_idx - 1]
-        R = math.quat_to_3x3(x.rot[self._torso_idx - 1])
-        head_vec = jnp.array([0.0, 0.0, 0.0])  # To modify if you want the head position
-        head_pos = pos + jnp.dot(R, head_vec)
-        reward_pos = exp_shaping(jnp.sum((head_pos - pos_tar) ** 2), scale=1.0)
-
-        # stay upright reward
-        vec_tar = jnp.array([0.0, 0.0, 1.0])
-        vec = math.rotate(vec_tar, x.rot[0])
-        reward_upright = exp_shaping(jnp.sum(jnp.square(vec - vec_tar)), scale=4.0)
-
-        # yaw orientation reward
-        yaw_tar = (
-            state.info["yaw_tar"]
-            + state.info["ang_vel_tar"][2] * self.dt * state.info["step"]
-        )
+        # Yaw orientation reward
+        yaw_tar = state.info["yaw_tar"] + state.info["ang_vel_tar"][2] * self.dt * state.info["step"]
         yaw = math.quat_to_euler(x.rot[self._torso_idx - 1])[2]
         d_yaw = yaw - yaw_tar
-        reward_yaw = exp_shaping(jnp.square(jnp.atan2(jnp.sin(d_yaw), jnp.cos(d_yaw))), scale=4.0)
 
-        # velocity reward
-        vb = global_to_body_velocity(
-            xd.vel[self._torso_idx - 1], x.rot[self._torso_idx - 1]
-        )
-        ab = global_to_body_velocity(
-            xd.ang[self._torso_idx - 1] * jnp.pi / 180.0, x.rot[self._torso_idx - 1]
-        )
-        reward_vel = exp_shaping(jnp.sum((vb[:2] - state.info["vel_tar"][:2]) ** 2), scale=4.0)
-        reward_ang_vel = exp_shaping(jnp.sum((ab[2] - state.info["ang_vel_tar"][2]) ** 2), scale=4.0)
+        reward_yaw = -jnp.square(jnp.atan2(jnp.sin(d_yaw), jnp.cos(d_yaw)))
 
-        # height reward
-        reward_height = exp_shaping(jnp.sum(
-            (x.pos[self._torso_idx - 1, 2] - state.info["pos_tar"][2]) ** 2
-        ), scale=1.0)
+        # Velocity reward
+        vb = global_to_body_velocity(xd.vel[self._torso_idx - 1], x.rot[self._torso_idx - 1])
+        ab = global_to_body_velocity(xd.ang[self._torso_idx - 1] * jnp.pi / 180.0, x.rot[self._torso_idx - 1])
 
-        # energy reward
-        reward_energy = exp_shaping(jnp.sum(
-            jnp.maximum(ctrl * pipeline_state.qvel[6:] / 160.0, 0.0) ** 2
-        ), scale=1.0)
+        reward_vel = -jnp.sum((vb[:2] - state.info["vel_tar"][:2]) ** 2)
+        reward_ang_vel = -jnp.sum((ab[2] - state.info["ang_vel_tar"][2]) ** 2)
 
-        # stay alive reward
-        reward_alive = exp_shaping(1.0 - state.done, scale=1.0)
+        # Stay upright reward
+        vec_tar = jnp.array([0.0, 0.0, 1.0])
+        vec = math.rotate(vec_tar, x.rot[0])
+        reward_upright = -jnp.sum(jnp.square(vec - vec_tar))
 
-        # final reward
+        # Final reward computation
         reward = (
-            reward_gaits * 0.0 # 1.5
-            + reward_upright * 1.0
-            + reward_yaw * 1.0
+            reward_yaw * 0.3
             + reward_vel * 1.0
             + reward_ang_vel * 1.0
-            + reward_height * 1.0
+            + reward_upright * 0.5
         )
 
 
@@ -294,32 +245,69 @@ class UnitreeAliengoEnv(BaseEnv):
             ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝   ╚═╝   ╚══════╝
                                                                                                     """
 
-        #jax.debug.print("reward: {x}", x=reward)
+        # Limits for various physical quantities
+        torque_limit =   jnp.array([35.0, 35.0, 45.0, 
+                                    35.0, 35.0, 45.0,
+                                    35.0, 35.0, 45.0,
+                                    35.0, 35.0, 45.0])
+        velocity_limit = jnp.array([20.0, 20.0, 16.0,
+                                    20.0, 20.0, 16.0, 
+                                    20.0, 20.0, 16.0, 
+                                    20.0, 20.0, 16.0])
 
-        # Initialize limits
-        torque_limit = jnp.array([35.0, 35.0, 45.0, 35.0, 35.0, 45.0, 35.0, 35.0, 45.0, 35.0, 35.0, 45.0])
+        # Torque constraint violation
+        cstr_torque = (jnp.abs(ctrl) - self.joint_torque_range[:,1]) / self.joint_torque_range[:,1]
 
-        # Torque violation - with normalization
-        cstr_torque = jnp.maximum(0.0, (jnp.abs(ctrl)-torque_limit) / torque_limit)
-        cstr_HAA = jnp.maximum(0.0, (jnp.abs(pipeline_state.q[jnp.array([7, 10, 13, 16])])-0.1) / 0.1)
-        #cstr_air_time = jnp.maximum(0.0, (0.2 - state.info["feet_air_time"])/0.2 * first_contact)
-        cstr_feet_z = jnp.maximum(0.0, (jnp.abs(z_feet_tar - z_feet) - 0.01)/0.01)
+        # Velocity constraint violation
+        cstr_velocity = (jnp.abs(pipeline_state.qvel[6:]) - velocity_limit) / velocity_limit
 
-        # Velocity violation
-        # velocity_violation = jnp.abs(pipeline_state.qvel[6:]) - velocity_limit
+        # HAA (Hip Adduction/Abduction) angle constraint violation
+        cstr_HAA = (jnp.abs(pipeline_state.q[jnp.array([7, 10, 13, 16])]) - 0.2) / 0.2
 
-        """ # Maximum constraint violation, ensuring comparison with 0.0
-        c_max = jnp.maximum(0.0, jnp.maximum(jnp.max(torque_violation), jnp.max(velocity_violation)))
-        c_max = jnp.maximum(state.info["c_max"], c_max) """
+        # Air time constraint (normalized by foot contact)
+        cstr_air_time = (0.2 - state.info["feet_air_time"]) / 0.2 * first_contact
 
-        constr = jnp.concatenate([cstr_torque, cstr_HAA, cstr_feet_z])
+        # Orientation constraint (limit on the magnitude of the orientation vector)
+        qw, qx, qy, qz = x.rot[self._torso_idx - 1]
+        roll_limit = jnp.radians(20)
+        pitch_limit = jnp.radians(20)
+        roll = jnp.arctan2(2 * (qw * qx + qy * qz), 1 - 2 * (qx**2 + qy**2))
+        pitch = jnp.arcsin(2 * (qw * qy - qz * qx))
+        cstr_roll = 0.0 * jnp.expand_dims((roll - roll_limit)/roll_limit, axis=0)
+        cstr_pitch = 0.0 * jnp.expand_dims((pitch - pitch_limit)/pitch_limit, axis=0)
 
-        # jax.debug.print("HAA: {x}", x=jnp.abs(pipeline_state.q[jnp.array([7, 10, 13, 16])]))
+        # Foot contact constraints (ensuring only one pair of feet are in contact)
+        foot_contact = foot_contact_z < 1e-3  # True if foot is in contact with terrain
+        pair1 = foot_contact[0] & foot_contact[3]
+        pair2 = foot_contact[1] & foot_contact[2]
+        cstr_feet_contact = 1.0 - (pair1 + pair2)  # At least one pair in contact
+        # cstr_feet_contact = 1.0 - (pair1 ^ pair2)  # Only one pair in contact (XOR)
+        cstr_feet_contact = jnp.expand_dims(cstr_feet_contact, axis=0)
 
-        # done
+        # Body height constraint (lower bound on torso height)
+        cstr_height = jnp.expand_dims(0.33 - x.pos[self._torso_idx - 1, 2], axis=0)
+
+        # Concatenate all the constraints into a single array
+        constr_raw = jnp.concatenate([
+            cstr_torque, 
+            cstr_velocity, 
+            cstr_HAA, 
+            cstr_feet_contact, 
+            cstr_air_time, 
+            cstr_roll,
+            cstr_pitch,
+            cstr_height
+        ])
+
+        # Apply the maximum constraint violation (clamping)
+        constr = jnp.maximum(0.0, constr_raw)
+
+        # Check done conditions
         up = jnp.array([0.0, 0.0, 1.0]) 
         joint_angles = pipeline_state.q[7:]
-        done = jnp.dot(math.rotate(up, x.rot[self._torso_idx - 1]), up) < 0
+        # done = jnp.dot(math.rotate(up, x.rot[self._torso_idx - 1]), up) < 0
+        threshold = jnp.cos(0.5)  
+        done = jnp.dot(math.rotate(up, x.rot[self._torso_idx - 1]), up) < threshold
         done |= jnp.any(joint_angles < self.joint_range[:, 0])
         done |= jnp.any(joint_angles > self.joint_range[:, 1])
         done |= pipeline_state.x.pos[self._torso_idx - 1, 2] < 0.18
@@ -328,8 +316,6 @@ class UnitreeAliengoEnv(BaseEnv):
         # state management
         state.info["step"] += 1
         state.info["rng"] = rng
-        state.info["z_feet"] = z_feet
-        state.info["z_feet_tar"] = z_feet_tar
         state.info["feet_air_time"] *= ~contact_filt_mm
         state.info["last_contact"] = contact
         # state.info["c_max"] = c_max
