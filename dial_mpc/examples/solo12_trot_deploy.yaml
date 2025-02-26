@@ -4,7 +4,7 @@ output_dir: solo12_trot
 n_steps: 400
 
 env_name: solo12_walk
-Nsample: 2048
+Nsample: 1024
 Hsample: 16
 Hnode: 4
 Ndiffuse: 1
@@ -17,7 +17,7 @@ update_method: mppi
 # Base environment
 dt: 0.02
 timestep: 0.02
-leg_control: position
+leg_control: torque
 action_scale: 1.0
 
 # Solo12
@@ -30,20 +30,20 @@ gait: trot
 # Sim
 robot_name: "solo12"
 scene_name: "scene_solo12.xml"
-sim_leg_control: position
+sim_leg_control: torque
 plot: false
-record: false
-real_time_factor: 0.25
+record: true
+real_time_factor: 1.0
 sim_dt: 0.005
 sync_mode: false
 
 # Real
-real_leg_control: position
+real_leg_control: torque
 network_interface: "enp2s0"
 real_kp: 4.0
 real_kd: 0.2
 initial_position_ctrl:
-  [0.0, 0.67, -1.3, 0.0, 0.67, -1.3, 0.0, 0.67, -1.3, 0.0, 0.67, -1.3]
+  [0.0, 0.4, -0.8,  0.0, 0.4, -0.8,  0.0, 0.4, -0.8,  0.0, 0.4, -0.8]
 low_cmd_pub_dt: 0.002
 localization_plugin: "ros2_odometry_plugin"
 localization_timeout_sec: 0.1

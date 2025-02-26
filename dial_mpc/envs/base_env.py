@@ -36,9 +36,12 @@ class BaseEnv(PipelineEnv):
 
     @partial(jax.jit, static_argnums=(0,))
     def act2joint(self, act: jax.Array) -> jax.Array:
+
+        #jax.debug.print("{x}", x = act)
         act_normalized = (
             act * self._config.action_scale + 1.0
         ) / 2.0  # normalize to [0, 1]
+        # The joint range is the one I set in the robot environment
         joint_targets = self.joint_range[:, 0] + act_normalized * (
             self.joint_range[:, 1] - self.joint_range[:, 0]
         )  # scale to joint range
@@ -57,6 +60,7 @@ class BaseEnv(PipelineEnv):
         q = q[: len(joint_target)]
         qd = pipline_state.qvel[6:]
         qd = qd[: len(joint_target)]
+        #jax.debug.print("joint_target: {x}, q = {y}", x = joint_target, y = q)
         q_err = joint_target - q
         tau = self._config.kp * q_err - self._config.kd * qd
 

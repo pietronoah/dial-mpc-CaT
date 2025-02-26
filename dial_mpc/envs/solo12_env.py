@@ -77,6 +77,38 @@ class Solo12Env(BaseEnv):
 
         self.joint_range = jnp.array(
             [
+                [-0.3, 0.3],
+                [0.2, 1.0],
+                [-1.4, -0.6],
+                [-0.3, 0.3],
+                [0.2, 1.0],
+                [-1.4, -0.6],
+                [-0.3, 0.3],
+                [0.2, 1.0],
+                [-1.4, -0.6],
+                [-0.3, 0.3],
+                [0.2, 1.0],
+                [-1.4, -0.6],
+            ]
+        )
+        """ self.joint_range = jnp.array(
+            [
+                [-0.3, 0.3],
+                [0.0, 0.8],
+                [-1.2, -0.4],
+                [-0.3, 0.3],
+                [0.0, 0.8],
+                [-1.2, -0.4],
+                [-0.3, 0.3],
+                [0.0, 0.8],
+                [-1.2, -0.4],
+                [-0.3, 0.3],
+                [0.0, 0.8],
+                [-1.2, -0.4],
+            ]
+        ) """
+        """ self.joint_range = jnp.array(
+            [
                 [-0.5, 0.5],
                 [-1, 1],
                 [-2, -0.5],
@@ -90,7 +122,23 @@ class Solo12Env(BaseEnv):
                 [-1, 1],
                 [-2, -0.5],
             ]
-        )
+        ) """
+        """ self.joint_range = jnp.array(
+            [
+                [-0.9, 0.9],
+                [-1.45, 1.45],
+                [-2.8, 2.8],
+                [-0.9, 0.9],
+                [-1.45, 1.45],
+                [-2.8, 2.8],
+                [-0.9, 0.9],
+                [-1.45, 1.45],
+                [-2.8, 2.8],
+                [-0.9, 0.9],
+                [-1.45, 1.45],
+                [-2.8, 2.8],
+            ]
+        ) """
         self.joint_velocity_range = jnp.array(
             [
                 [-20, 20],
@@ -401,7 +449,9 @@ class Solo12Env(BaseEnv):
         cstr_HAA = (jnp.abs(pipeline_state.q[jnp.array([7, 10, 13, 16])]) - 0.2) / 0.2
 
         # Air time constraint (normalized by foot contact)
-        cstr_air_time = 0.0*(0.2 - state.info["feet_air_time"]) / 0.2 * first_contact
+        cstr_air_time_lower = (0.1 - state.info["feet_air_time"]) / 0.1 * first_contact
+        cstr_air_time_upper = (state.info["feet_air_time"] - 0.15) / 0.15 * first_contact
+        cstr_air_time = 0.0 * jnp.maximum(cstr_air_time_lower, cstr_air_time_upper)
 
         # Orientation constraint (limit on the magnitude of the orientation vector)
         qw, qx, qy, qz = x.rot[self._torso_idx - 1]
@@ -416,12 +466,12 @@ class Solo12Env(BaseEnv):
         foot_contact = foot_contact_z < 1e-3  # True if foot is in contact with terrain
         pair1 = foot_contact[0] & foot_contact[3]
         pair2 = foot_contact[1] & foot_contact[2]
-        cstr_feet_contact = 1.0 - (pair1 + pair2)  # At least one pair in contact
-        # cstr_feet_contact = 1.0 - (pair1 ^ pair2)  # Only one pair in contact (XOR)
-        cstr_feet_contact = 0.0*jnp.expand_dims(cstr_feet_contact, axis=0)
+        # cstr_feet_contact = 1.0 - (pair1 + pair2)  # At least one pair in contact
+        cstr_feet_contact = 1.0 - (pair1 ^ pair2)  # Only one pair in contact (XOR)
+        cstr_feet_contact = 0.0 * jnp.expand_dims(cstr_feet_contact, axis=0)
 
         # Body height constraint (lower bound on torso height)
-        cstr_height = jnp.expand_dims(0.33 - x.pos[self._torso_idx - 1, 2], axis=0)
+        cstr_height = jnp.expand_dims(0.25 - x.pos[self._torso_idx - 1, 2], axis=0)
 
         # Concatenate all the constraints into a single array
         constr_raw = jnp.concatenate([

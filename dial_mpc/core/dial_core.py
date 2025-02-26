@@ -31,7 +31,8 @@ plt.style.use("science")
 xla_flags = os.environ.get("XLA_FLAGS", "")
 xla_flags += " --xla_gpu_triton_gemm_any=True"
 os.environ["XLA_FLAGS"] = xla_flags
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "true"
 
 
 def rollout_us(step_env, state, us):
@@ -260,7 +261,7 @@ def main():
         rng, Y0, info, c_max_updated = mbdpi.reverse_once(state, rng, Y0, factor, c_max)
         return (rng, Y0, state, c_max_updated), info
 
-    art.tprint("Idra @ UniTn\nDial-MPC", font="big", chr_ignore=True)
+    art.tprint("Gepetto @ LAAS\nDial-MPC", font="small", chr_ignore=True)
     parser = argparse.ArgumentParser()
     config_or_example = parser.add_mutually_exclusive_group(required=True)
     config_or_example.add_argument("--config", type=str, default=None)
@@ -416,7 +417,7 @@ def main():
     def index():
         return webpage
 
-    app.run(port=5000)
+    app.run(port=5002)
 
 
 if __name__ == "__main__":

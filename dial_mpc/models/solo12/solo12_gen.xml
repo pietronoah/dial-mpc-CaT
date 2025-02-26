@@ -231,7 +231,22 @@
     </body>
   </worldbody>
 
-  <actuator>
+  <!-- <actuator>
+    <position joint="FL_HAA" name="FL_HAA" kp="3.0" kv="0.05"/>
+    <position joint="FL_HFE" name="FL_HFE" kp="3.0" kv="0.05"/>
+    <position joint="FL_KFE" name="FL_KFE" kp="3.0" kv="0.05"/>
+    <position joint="FR_HAA" name="FR_HAA" kp="3.0" kv="0.05"/>
+    <position joint="FR_HFE" name="FR_HFE" kp="3.0" kv="0.05"/>
+    <position joint="FR_KFE" name="FR_KFE" kp="3.0" kv="0.05"/>
+    <position joint="HL_HAA" name="HL_HAA" kp="3.0" kv="0.05"/>
+    <position joint="HL_HFE" name="HL_HFE" kp="3.0" kv="0.05"/>
+    <position joint="HL_KFE" name="HL_KFE" kp="3.0" kv="0.05"/>
+    <position joint="HR_HAA" name="HR_HAA" kp="3.0" kv="0.05"/>
+    <position joint="HR_HFE" name="HR_HFE" kp="3.0" kv="0.05"/>
+    <position joint="HR_KFE" name="HR_KFE" kp="3.0" kv="0.05"/>
+  </actuator> -->
+
+  <!-- <actuator>
     <position joint="FL_HAA" name="FL_HAA" kp="4.0" kv="0.2"/>
     <position joint="FL_HFE" name="FL_HFE" kp="4.0" kv="0.2"/>
     <position joint="FL_KFE" name="FL_KFE" kp="4.0" kv="0.2"/>
@@ -244,9 +259,9 @@
     <position joint="HR_HAA" name="HR_HAA" kp="4.0" kv="0.2"/>
     <position joint="HR_HFE" name="HR_HFE" kp="4.0" kv="0.2"/>
     <position joint="HR_KFE" name="HR_KFE" kp="4.0" kv="0.2"/>
-  </actuator>
+  </actuator> -->
 
-  <!-- <actuator>
+  <actuator>
     <motor joint="FL_HAA" name="FL_HAA" gear="1" ctrlrange="-4.0 4.0" ctrllimited="true"/>
     <motor joint="FL_HFE" name="FL_HFE" gear="1" ctrlrange="-4.0 4.0" ctrllimited="true"/>
     <motor joint="FL_KFE" name="FL_KFE" gear="1" ctrlrange="-4.0 4.0" ctrllimited="true"/>
@@ -259,7 +274,7 @@
     <motor joint="HR_HAA" name="HR_HAA" gear="1" ctrlrange="-4.0 4.0" ctrllimited="true"/>
     <motor joint="HR_HFE" name="HR_HFE" gear="1" ctrlrange="-4.0 4.0" ctrllimited="true"/>
     <motor joint="HR_KFE" name="HR_KFE" gear="1" ctrlrange="-4.0 4.0" ctrllimited="true"/>
-  </actuator> -->
+  </actuator>
 
   
   <!-- Collision exclusion from SRDF (robot_properties_solo) -->

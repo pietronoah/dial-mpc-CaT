@@ -300,7 +300,7 @@ class DialSim:
 
 
 def main(args=None):
-    art.tprint("IDRA @ UniTN\nDIAL-MPC\nSIMULATOR", font="big", chr_ignore=True)
+    art.tprint("Gepetto @ LAAS\nDIAL-MPC\nSIMULATOR", font="small", chr_ignore=True)
     parser = argparse.ArgumentParser()
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument(

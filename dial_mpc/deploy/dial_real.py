@@ -293,7 +293,7 @@ class DialReal:
 
 
 def main(args=None):
-    art.tprint("IDRA @ UniTN\nDIAL-MPC\nREAL", font="big", chr_ignore=True)
+    art.tprint("Gepetto @ LAAS\nDIAL-MPC\nREAL", font="small", chr_ignore=True)
     parser = argparse.ArgumentParser()
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument(

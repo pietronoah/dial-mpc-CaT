@@ -177,11 +177,10 @@ class UnitreeAliengoEnv(BaseEnv):
             return self.sample_command(cmd_rng)
 
         vel_tar, ang_vel_tar = jax.lax.cond(
-            (state.info["randomize_target"]) & (state.info["step"] % 50 == 0),
+            (state.info["randomize_target"]) & (state.info["step"] % 500 == 0),
             randomize,
             dont_randomize,
         )
-        # jax.debug.print("Target vel: {x}, ang vel: {y}", x=vel_tar, y=ang_vel_tar)
         state.info["vel_tar"] = jnp.minimum(
             vel_tar * state.info["step"] * self.dt / self._config.ramp_up_time, vel_tar
         )

@@ -80,7 +80,7 @@ class MBDPublisher:
         self.Y = jnp.zeros([self.dial_config.Hnode + 1, self.mbdpi.nu])
         self.ctrl_dt = env_config.dt
 
-        self.c_max = jnp.zeros([38])
+        self.c_max = jnp.zeros([36])
 
         # parameters
         self.timer_period = env_config.dt  # seconds
@@ -239,7 +239,7 @@ class MBDPublisher:
 
 
 def main(args=None):
-    art.tprint("IDRA @ UniTN\nDIAL-MPC\nPLANNER", font="big", chr_ignore=True)
+    art.tprint("Gepetto @ LAAS\nDIAL-MPC\nPLANNER", font="small", chr_ignore=True)
     parser = argparse.ArgumentParser()
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument(

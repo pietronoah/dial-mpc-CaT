@@ -6,9 +6,9 @@ class BaseEnvConfig:
     task_name: str = "default"
     randomize_tasks: bool = False  # Whether to randomize the task.
     # P gain, or a list of P gains for each joint.
-    kp: float = 30.0
+    kp: float = 3.0
     # D gain, or a list of D gains for each joint.
-    kd: float = 0.0
+    kd: float = 0.05
     debug: bool = False
     # dt of the environment step, not the underlying simulator step.
     dt: float = 0.02
